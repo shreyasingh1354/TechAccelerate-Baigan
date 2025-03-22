@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:geolocator/geolocator.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,10 +14,17 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Accelerometer data
   double _xValue = 0.0;
   double _yValue = 0.0;
   double _zValue = 0.0;
 
+  // Location data
+  Position? _currentPosition;
+  String _locationError = '';
+  bool _loadingLocation = false;
+
+  // WebSocket variables
   WebSocketChannel? _channel;
   bool _isConnected = false;
   String _lastMessage = "No messages received";
@@ -28,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _connectToWebSocket();
     _startListeningToAccelerometer();
+    _getCurrentLocation();
   }
 
   void _startListeningToAccelerometer() {
@@ -40,6 +49,54 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       _sendSensorData();
     });
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() {
+      _loadingLocation = true;
+      _locationError = '';
+    });
+
+    try {
+      // Check for location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() {
+            _loadingLocation = false;
+            _locationError = 'Location permission denied';
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() {
+          _loadingLocation = false;
+          _locationError = 'Location permission permanently denied';
+        });
+        return;
+      }
+
+      // Get the current position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _currentPosition = position;
+        _loadingLocation = false;
+      });
+
+      // Send updated data including new location
+      _sendSensorData();
+    } catch (e) {
+      setState(() {
+        _loadingLocation = false;
+        _locationError = 'Error getting location: $e';
+      });
+    }
   }
 
   void _connectToWebSocket() {
@@ -98,7 +155,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final data = {
       "timestamp": DateTime.now().toIso8601String(),
-      "accelerometer": {"x": _xValue, "y": _yValue, "z": _zValue}
+      "accelerometer": {"x": _xValue, "y": _yValue, "z": _zValue},
+      "location": _currentPosition != null
+          ? {
+              "latitude": _currentPosition!.latitude,
+              "longitude": _currentPosition!.longitude,
+              "altitude": _currentPosition!.altitude,
+              "accuracy": _currentPosition!.accuracy
+            }
+          : null
     };
 
     try {
@@ -208,6 +273,59 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
+
+                const SizedBox(height: 16),
+
+                // Location Data
+                Card(
+                  elevation: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Current Location',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        if (_loadingLocation)
+                          const Center(child: CircularProgressIndicator())
+                        else if (_locationError.isNotEmpty)
+                          Text(
+                            _locationError,
+                            style: const TextStyle(color: Colors.red),
+                          )
+                        else if (_currentPosition != null)
+                          Column(
+                            children: [
+                              _locationInfoRow(
+                                  'Latitude', '${_currentPosition!.latitude}°'),
+                              const SizedBox(height: 8),
+                              _locationInfoRow('Longitude',
+                                  '${_currentPosition!.longitude}°'),
+                              const SizedBox(height: 8),
+                              _locationInfoRow('Altitude',
+                                  '${_currentPosition!.altitude.toStringAsFixed(2)} m'),
+                              const SizedBox(height: 8),
+                              _locationInfoRow('Accuracy',
+                                  '${_currentPosition!.accuracy.toStringAsFixed(2)} m'),
+                            ],
+                          )
+                        else
+                          const Text('Location not available'),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: _getCurrentLocation,
+                          child: const Text('Refresh Location'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -222,6 +340,13 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(axis, style: const TextStyle(fontWeight: FontWeight.bold)),
         Text(value),
       ],
+    );
+  }
+
+  Widget _locationInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [Text(label), Text(value)],
     );
   }
 }
