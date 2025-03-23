@@ -63,7 +63,7 @@ class EmergencyServicesGrid extends StatelessWidget {
           ),
         ),
         Container(
-          height: 280, // Fixed height for the grid
+          height: 300, // Fixed height for the grid
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
           decoration: BoxDecoration(
             color: Colors.white,
