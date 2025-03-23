@@ -1,36 +1,47 @@
 import 'package:flutter/material.dart';
-import 'package:baigan/theme/app_colors.dart';
 
 class EmergencyContactsWidget extends StatelessWidget {
   const EmergencyContactsWidget({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // Data for emergency contacts
-    final List<String> names = [
-      'Aryan',
-      'Shreya',
-      'Nithish',
-      'Maheep',
-      'Parth'
-    ];
-    final List<IconData> icons = [
-      Icons.person,
-      Icons.person,
-      Icons.person,
-      Icons.person,
-      Icons.person,
-    ];
-    final List<Color> colors = [
-      Colors.blue,
-      Colors.red,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
+    // Data for emergency contacts (name, phone, icon, color)
+    final List<Map<String, dynamic>> contacts = [
+      {
+        'name': 'Aryan',
+        'phone': '7738967429',
+        'icon': Icons.person,
+        'color': Colors.blue,
+      },
+      {
+        'name': 'Shreya',
+        'phone': '9082532164',
+        'icon': Icons.person,
+        'color': Colors.red,
+      },
+      {
+        'name': 'Nithish',
+        'phone': '9626231079',
+        'icon': Icons.person,
+        'color': Colors.green,
+      },
+      {
+        'name': 'Maheep',
+        'phone': '930777556',
+        'icon': Icons.person,
+        'color': Colors.orange,
+      },
+      {
+        'name': 'Parth',
+        'phone': '567-890-1234',
+        'icon': Icons.person,
+        'color': Colors.purple,
+      },
     ];
 
     return Column(
       children: [
+        // Section Header
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
           child: Row(
@@ -67,6 +78,8 @@ class EmergencyContactsWidget extends StatelessWidget {
             ],
           ),
         ),
+
+        // Horizontal List of Contacts
         Container(
           height: 160, // Fixed height for the contacts
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -85,55 +98,116 @@ class EmergencyContactsWidget extends StatelessWidget {
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
             scrollDirection: Axis.horizontal,
-            itemCount: names.length,
+            itemCount: contacts.length,
             itemBuilder: (context, index) {
-              return Container(
-                width: 100,
-                margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  color: colors[index].withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: colors[index].withOpacity(0.3)),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: colors[index].withOpacity(0.2),
-                            spreadRadius: 1,
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+              final contact = contacts[index];
+              final Color color = contact['color'];
+              return GestureDetector(
+                onTap: () => _showContactDetails(context, contact),
+                child: Container(
+                  width: 100,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: color.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withOpacity(0.2),
+                              spreadRadius: 1,
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          contact['icon'],
+                          color: color,
+                          size: 36,
+                        ),
                       ),
-                      child: Icon(
-                        icons[index],
-                        color: colors[index],
-                        size: 36,
+                      const SizedBox(height: 12),
+                      Text(
+                        contact['name'],
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      names[index],
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
           ),
         ),
       ],
+    );
+  }
+
+  /// Show an AlertDialog with expanded contact info (name, phone).
+  void _showContactDetails(BuildContext context, Map<String, dynamic> contact) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 200),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon with bigger size
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: contact['color'].withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    contact['icon'],
+                    color: contact['color'],
+                    size: 48,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  contact['name'],
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  contact['phone'],
+                  style: const TextStyle(
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
