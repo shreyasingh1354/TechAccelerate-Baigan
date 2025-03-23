@@ -54,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "RecQ AI",
+                      "resQ",
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,

@@ -56,7 +56,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "RescQ AI",
+                      "resQ",
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
