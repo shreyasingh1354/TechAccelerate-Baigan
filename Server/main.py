@@ -120,6 +120,30 @@ async def get_hospitals(lat: float, lon: float):
 
     return {"hospitals": filtered_data}
 
+@app.post("/get-police/")
+async def get_hospitals(lat: float, lon: float):
+    url = f"https://api.geoapify.com/v2/places?categories=service.police&filter=circle:{lat},{lon},15000&bias=proximity:{lat},{lon}&limit=20&apiKey={GEO_API_KEY}"
+
+    response = requests.get(url)
+    data = response.json()
+
+    # Filter out hospitals that have an empty "details" field
+    filtered_features = [feature for feature in data.get("features", []) if feature["properties"].get("details")]
+
+    filtered_data = []
+    for feature in filtered_features:
+        properties = feature["properties"]
+        coordinates = feature["geometry"]["coordinates"]
+
+        filtered_data.append({
+            "name": properties.get("address_line1", ""),
+            "address": properties.get("address_line2", ""),
+            "contact": properties.get("contact", {}).get("phone", ""),
+            "location_url": f"https://www.google.com/maps?q={coordinates[1]},{coordinates[0]}"
+        })
+
+    return {"hospitals": filtered_data}
+
 @app.post("/send-sos/")
 async def send_sos(lat: float, lon: float, contact: str):
     url = "https://www.fast2sms.com/dev/bulkV2"
