@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Fall Detection System")
 connections = set()
 
+GEO_API_KEY="447746b793944a4ea89ee40c54badca4"
+SMS_API_KEY="60WBkIAfEhPZnKCMS1XVxF2ya7vJdRLYrwopszjDgNQ3itHlTbr9q6Bzhbf1lKACJGv0HEIniTap78jV"
+
 # Initialize fall detector
 detector = FallDetector()
 detector_task = None
@@ -92,6 +95,75 @@ async def websocket_endpoint(websocket: WebSocket):
         if len(connections) == 0 and detector_task is not None:
             detector.stop_processing()
             detector_task = None
+
+@app.post("/get-hospitals/")
+async def get_hospitals(lat: float, lon: float):
+    url = f"https://api.geoapify.com/v2/places?categories=healthcare.hospital&filter=circle:{lat},{lon},5000&bias=proximity:{lat},{lon}&limit=20&apiKey={GEO_API_KEY}"
+
+    response = requests.get(url)
+    data = response.json()
+
+    # Filter out hospitals that have an empty "details" field
+    filtered_features = [feature for feature in data.get("features", []) if feature["properties"].get("details")]
+
+    filtered_data = []
+    for feature in filtered_features:
+        properties = feature["properties"]
+        coordinates = feature["geometry"]["coordinates"]
+
+        filtered_data.append({
+            "name": properties.get("address_line1", ""),
+            "address": properties.get("address_line2", ""),
+            "contact": properties.get("contact", {}).get("phone", ""),
+            "location_url": f"https://www.google.com/maps?q={coordinates[1]},{coordinates[0]}"
+        })
+
+    return {"hospitals": filtered_data}
+
+@app.post("/get-police/")
+async def get_hospitals(lat: float, lon: float):
+    url = f"https://api.geoapify.com/v2/places?categories=service.police&filter=circle:{lat},{lon},15000&bias=proximity:{lat},{lon}&limit=20&apiKey={GEO_API_KEY}"
+
+    response = requests.get(url)
+    data = response.json()
+
+    # Filter out hospitals that have an empty "details" field
+    filtered_features = [feature for feature in data.get("features", []) if feature["properties"].get("details")]
+
+    filtered_data = []
+    for feature in filtered_features:
+        properties = feature["properties"]
+        coordinates = feature["geometry"]["coordinates"]
+
+        filtered_data.append({
+            "name": properties.get("address_line1", ""),
+            "address": properties.get("address_line2", ""),
+            "contact": properties.get("contact", {}).get("phone", ""),
+            "location_url": f"https://www.google.com/maps?q={coordinates[1]},{coordinates[0]}"
+        })
+
+    return {"hospitals": filtered_data}
+
+@app.post("/send-sos/")
+async def send_sos(lat: float, lon: float, contact: str):
+    url = "https://www.fast2sms.com/dev/bulkV2"
+    location_link = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+
+    querystring = {
+        "authorization": SMS_API_KEY,
+        "message": f"🚨 SOS\nThis is not a drill\nI'm in danger! Help me!! \n {location_link}",
+        "language": "english",
+        "route": "q",
+        "numbers": contact
+    }
+
+    headers = {
+        'cache-control': "no-cache"
+    }
+
+    response = requests.get(url, headers=headers, params=querystring)
+
+    return {"status": response.status_code, "response": response.text}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
