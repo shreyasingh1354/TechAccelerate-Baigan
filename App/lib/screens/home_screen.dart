@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _connectToWebSocket() {
     try {
-      final wsUrl = 'ws://10.0.2.2:8000/ws';
+      final wsUrl = 'ws://65.0.61.170/ws';
       print("Connecting to WebSocket at: $wsUrl");
 
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
