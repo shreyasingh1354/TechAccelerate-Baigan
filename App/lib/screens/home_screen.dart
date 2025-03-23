@@ -34,12 +34,17 @@ class _HomeScreenState extends State<HomeScreen> {
   WebSocketChannel? _channel;
   bool _isConnected = false;
   String _lastMessage = "No messages received";
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 5;
 
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
 
   @override
   void initState() {
     super.initState();
+    // Set system UI mode once in initState
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
     _connectToWebSocket();
     _startListeningToAccelerometer();
     _getCurrentLocation();
@@ -70,7 +75,8 @@ class _HomeScreenState extends State<HomeScreen> {
         if (permission == LocationPermission.denied) {
           setState(() {
             _loadingLocation = false;
-            _locationError = 'Location permission denied';
+            _locationError =
+                'Location access is required for emergency services';
           });
           return;
         }
@@ -79,7 +85,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (permission == LocationPermission.deniedForever) {
         setState(() {
           _loadingLocation = false;
-          _locationError = 'Location permission permanently denied';
+          _locationError =
+              'Please enable location in your device settings for emergency features';
         });
         return;
       }
@@ -97,20 +104,26 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       setState(() {
         _loadingLocation = false;
-        _locationError = 'Error getting location: $e';
+        _locationError = 'Unable to access location: ${e.toString()}';
       });
     }
   }
 
   void _connectToWebSocket() {
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      print("Max reconnection attempts reached");
+      return;
+    }
+
     try {
-      final wsUrl = 'ws://65.0.61.170/ws';
+      final wsUrl = 'ws://10.0.2.2/ws';
       print("Connecting to WebSocket at: $wsUrl");
 
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
       setState(() {
         _isConnected = true;
+        _reconnectAttempts = 0; // Reset on successful connection
       });
 
       _channel!.stream.listen(
@@ -125,14 +138,14 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _isConnected = false;
           });
-          _reconnectWebSocket();
+          _scheduleReconnect();
         },
         onError: (error) {
           print("WebSocket error: $error");
           setState(() {
             _isConnected = false;
           });
-          _reconnectWebSocket();
+          _scheduleReconnect();
         },
       );
     } catch (e) {
@@ -140,17 +153,22 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isConnected = false;
       });
-      _reconnectWebSocket();
+      _scheduleReconnect();
     }
   }
 
-  void _reconnectWebSocket() {
-    Future.delayed(const Duration(seconds: 5), () {
-      if (!_isConnected) {
-        print("Reconnecting WebSocket...");
-        _connectToWebSocket();
-      }
-    });
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(
+      Duration(seconds: 5 * (_reconnectAttempts + 1)), // Exponential backoff
+      () {
+        if (!_isConnected) {
+          _reconnectAttempts++;
+          print("Reconnecting WebSocket... Attempt $_reconnectAttempts");
+          _connectToWebSocket();
+        }
+      },
+    );
   }
 
   void _sendSensorData() {
@@ -173,26 +191,106 @@ class _HomeScreenState extends State<HomeScreen> {
       _channel!.sink.add(jsonEncode(data));
     } catch (e) {
       print("Error sending data: $e");
+      // Reconnect if there's an error sending data
+      if (_isConnected) {
+        setState(() {
+          _isConnected = false;
+        });
+        _scheduleReconnect();
+      }
     }
   }
 
-  // Add this method to handle the SOS response
-  void _handleSosResponse(http.Response response) {
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('SOS alert sent successfully!'),
-          backgroundColor: Colors.green,
-        ),
+  Future<bool> _sendSosAlert() async {
+    try {
+      if (_currentPosition == null) {
+        await _getCurrentLocation();
+        if (_currentPosition == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Unable to get location. Please enable location services.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return false;
+        }
+      }
+
+      // Default emergency contact (you might want to get this from user settings)
+      const String emergencyContact = "9082532164";
+
+      final Uri uri = Uri.parse('http://10.0.2.2/send-sos').replace(
+        queryParameters: {
+          'lat': _currentPosition!.latitude.toString(),
+          'lon': _currentPosition!.longitude.toString(),
+          'contact': emergencyContact,
+        },
       );
-    } else {
+
+      final response = await http.post(uri);
+
+      // Handle 307 redirect
+      if (response.statusCode == 307) {
+        final String? redirectUrl = response.headers['location'];
+        if (redirectUrl != null) {
+          final Uri newUrl = Uri.parse(redirectUrl);
+          final newResponse = await http.post(
+            newUrl,
+            headers: {'Content-Type': 'application/json'},
+          );
+
+          if (newResponse.statusCode == 200 || newResponse.statusCode == 201) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('SOS alert sent successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            return true;
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to send SOS alert. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return false;
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Redirect URL not found'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return false;
+        }
+      } else if (response.statusCode == 200 || response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('SOS alert sent successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        return true;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send SOS alert. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return false;
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('Failed to send SOS alert. Status: ${response.statusCode}'),
+          content: Text('Network error. Please check your connection.'),
           backgroundColor: Colors.red,
         ),
       );
+      return false;
     }
   }
 
@@ -200,13 +298,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _accelerometerSubscription?.cancel();
     _channel?.sink.close();
+    _reconnectTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
-
     return Scaffold(
       backgroundColor: Colors.grey.shade300,
       body: SafeArea(
@@ -223,6 +320,33 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Home',
                       showCartIcon: false,
                     ),
+                    if (_locationError.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.red),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _locationError,
+                                style: TextStyle(color: Colors.red.shade800),
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.refresh,
+                                  color: Colors.red.shade800),
+                              onPressed: _getCurrentLocation,
+                            )
+                          ],
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -232,83 +356,32 @@ class _HomeScreenState extends State<HomeScreen> {
                           const EmergencyServicesGrid(),
                           const SizedBox(height: 16),
                           SosButton(
-                            onPressed: () async {
-                              // Check if we have location data
-                              if (_currentPosition == null) {
-                                // Try to get location if we don't have it
-                                await _getCurrentLocation();
-
-                                // If still null after trying to get location
-                                if (_currentPosition == null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Unable to get location. Please enable location services.'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                  return;
-                                }
-                              }
-
-                              // Default emergency contact (you might want to get this from user settings)
-                              const String emergencyContact =
-                                  "9082532164, 9307775556, 9626231079";
-
-                              try {
-                                // Prepare the URL with query parameters
-                                final Uri uri =
-                                    Uri.parse('http://65.0.61.170/send-sos')
-                                        .replace(
-                                  queryParameters: {
-                                    'lat':
-                                        _currentPosition!.latitude.toString(),
-                                    'lon':
-                                        _currentPosition!.longitude.toString(),
-                                    'contact': emergencyContact,
-                                  },
-                                );
-
-                                // Send the POST request
-                                final response = await http.post(uri);
-
-                                // Handle 307 redirect
-                                if (response.statusCode == 307) {
-                                  final String? redirectUrl =
-                                      response.headers['location'];
-                                  if (redirectUrl != null) {
-                                    final Uri newUrl = Uri.parse(redirectUrl);
-                                    final newResponse = await http.post(
-                                      newUrl,
-                                      headers: {
-                                        'Content-Type': 'application/json'
-                                      },
-                                    );
-                                    _handleSosResponse(newResponse);
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Redirect URL not found'),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                } else {
-                                  _handleSosResponse(response);
-                                }
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content:
-                                        Text('Error sending SOS alert: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-
-                              print('SOS Pressed and request sent!');
-                            },
+                            onPressed: _sendSosAlert,
                           ),
+                          if (_loadingLocation)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    "Getting location...",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ),
