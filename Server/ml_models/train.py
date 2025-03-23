@@ -1,3 +1,4 @@
+#%%
 import os
 import pandas as pd
 import numpy as np
@@ -97,7 +98,8 @@ def preprocess_data(X, y):
     X_train_val, X_test, y_train_val, y_test = train_test_split(
         X_preprocessed, y, test_size=0.2, random_state=42, stratify=y
     )
-    
+
+ 
     X_train, X_val, y_train, y_val = train_test_split(
         X_train_val, y_train_val, test_size=0.25, random_state=42, stratify=y_train_val
     )
@@ -132,6 +134,7 @@ def evaluate_model(model, X_test, y_test):
     print(f"Test Loss: {test_loss:.4f}")
     
     # Make predictions
+
     y_pred = (model.predict(X_test) > 0.5).astype(int).flatten()
     
     # Calculate confusion matrix
@@ -183,7 +186,8 @@ def main():
     # Preprocess data
     print("Preprocessing data...")
     X_train, X_val, X_test, y_train, y_val, y_test, scaler = preprocess_data(X, y)
-    
+
+    print(X_test[:5])
     # Build model
     print("Building LSTM model...")
     input_shape = (X_train.shape[1], X_train.shape[2])  # (time_steps, features)
@@ -206,3 +210,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+# %%
