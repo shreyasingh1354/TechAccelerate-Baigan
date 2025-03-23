@@ -5,12 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:geolocator/geolocator.dart';
-
-// Import your custom widgets
 import 'package:baigan/widgets/custom_appbar.dart';
 import 'package:baigan/widgets/home_screen_emergency_contact_widget.dart';
 import 'package:baigan/widgets/home_screen_emergency_grid_widget.dart';
 import 'package:baigan/widgets/home_screen_sos_widget.dart';
+import 'package:http/http.dart' as http;
 // or adjust the paths based on your folder structure
 
 class HomeScreen extends StatefulWidget {
@@ -51,13 +50,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void _startListeningToAccelerometer() {
     _accelerometerSubscription =
         accelerometerEvents.listen((AccelerometerEvent event) {
-          setState(() {
-            _xValue = event.x;
-            _yValue = event.y;
-            _zValue = event.z;
-          });
-          _sendSensorData();
-        });
+      setState(() {
+        _xValue = event.x;
+        _yValue = event.y;
+        _zValue = event.z;
+      });
+      _sendSensorData();
+    });
   }
 
   Future<void> _getCurrentLocation() async {
@@ -117,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       _channel!.stream.listen(
-            (message) {
+        (message) {
           print('Received from server: $message');
           setState(() {
             _lastMessage = message.toString();
@@ -164,11 +163,11 @@ class _HomeScreenState extends State<HomeScreen> {
       "accelerometer": {"x": _xValue, "y": _yValue, "z": _zValue},
       "location": _currentPosition != null
           ? {
-        "latitude": _currentPosition!.latitude,
-        "longitude": _currentPosition!.longitude,
-        "altitude": _currentPosition!.altitude,
-        "accuracy": _currentPosition!.accuracy
-      }
+              "latitude": _currentPosition!.latitude,
+              "longitude": _currentPosition!.longitude,
+              "altitude": _currentPosition!.altitude,
+              "accuracy": _currentPosition!.accuracy
+            }
           : null
     };
 
@@ -195,26 +194,96 @@ class _HomeScreenState extends State<HomeScreen> {
           showCartIcon: false,
         ),
         backgroundColor: Colors.grey.shade300,
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              // Use your new custom widget
-              const EmergencyContactsWidget(),
-              const SizedBox(height: 30),
-              // Use your new custom widget
-              const EmergencyServicesGrid(),
-              const SizedBox(height: 30),
-              // Use your new custom widget
-              SosButton(
-                onPressed: () {
-                  // Add SOS action here
-                  print('SOS Pressed!');
-                },
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      const EmergencyContactsWidget(),
+                      const EmergencyServicesGrid(),
+                      SosButton(
+                        onPressed: () async {
+                          // Check if we have location data
+                          if (_currentPosition == null) {
+                            // Try to get location if we don't have it
+                            await _getCurrentLocation();
+
+                            // If still null after trying to get location
+                            if (_currentPosition == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Unable to get location. Please enable location services.'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+                          }
+
+                          // Default emergency contact (you might want to get this from user settings)
+                          const String emergencyContact =
+                              "9082532164, 9307775556, 9626231079"; // Replace with actual contact
+
+                          try {
+                            // Prepare the URL with query parameters
+                            final Uri uri =
+                                Uri.parse('http://65.0.61.170/send-sos')
+                                    .replace(
+                              queryParameters: {
+                                'lat': _currentPosition!.latitude.toString(),
+                                'lon': _currentPosition!.longitude.toString(),
+                                'contact': emergencyContact,
+                              },
+                            );
+
+                            // Send the POST request
+                            final response = await http.post(uri);
+
+                            // Handle the response
+                            if (response.statusCode == 200 ||
+                                response.statusCode == 201) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('SOS alert sent successfully!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                      'Failed to send SOS alert. Status: ${response.statusCode}'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error sending SOS alert: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+
+                          print('SOS Pressed and request sent!');
+                        },
+                      ),
+
+                      // Additional logic or UI can go here
+                    ],
+                  ),
+                ),
               ),
-              // Additional logic or UI can go here
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
