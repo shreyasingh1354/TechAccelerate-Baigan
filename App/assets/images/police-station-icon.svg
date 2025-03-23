@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <!-- Background -->
+  <rect width="300" height="300" fill="white"/>
+  
+  <!-- Main Building Structure - Red -->
+  <rect x="50" y="100" width="200" height="150" fill="#E30B13"/>
+  
+  <!-- Roof -->
+  <polygon points="30,100 150,40 270,100" fill="#E30B13"/>
+  
+  <!-- Door -->
+  <rect x="130" y="175" width="40" height="75" fill="white"/>
+  
+  <!-- Windows -->
+  <rect x="70" y="130" width="30" height="40" fill="white"/>
+  <rect x="200" y="130" width="30" height="40" fill="white"/>
+  <rect x="70" y="190" width="30" height="40" fill="white"/>
+  <rect x="200" y="190" width="30" height="40" fill="white"/>
+  
+  <!-- Police Sign -->
+  <rect x="115" y="80" width="70" height="30" fill="white"/>
+  <text x="150" y="102" text-anchor="middle" font-family="Arial" font-size="18" font-weight="bold" fill="#E30B13">POLICE</text>
+  
+  <!-- Police Light on Top -->
+  <rect x="135" y="40" width="30" height="10" fill="white"/>
+  <ellipse cx="150" cy="40" rx="15" ry="8" fill="#E30B13"/>
+</svg>

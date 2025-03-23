@@ -30,7 +30,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ]
           : null,
-      backgroundColor: AppColors.secondaryDarkGray,
+      backgroundColor: Colors.blue.withOpacity(0.7),
       elevation: 0,
       flexibleSpace: Container(
         decoration: BoxDecoration(

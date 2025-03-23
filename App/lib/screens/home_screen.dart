@@ -1,9 +1,17 @@
-import 'package:flutter/material.dart';
-import 'package:baigan/widgets/custom_appbar.dart';
 import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:geolocator/geolocator.dart';
+
+// Import your custom widgets
+import 'package:baigan/widgets/custom_appbar.dart';
+import 'package:baigan/widgets/home_screen_emergency_contact_widget.dart';
+import 'package:baigan/widgets/home_screen_emergency_grid_widget.dart';
+import 'package:baigan/widgets/home_screen_sos_widget.dart';
+// or adjust the paths based on your folder structure
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,10 +21,19 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // --- All your logic remains here ---
+
+  // Accelerometer data
   double _xValue = 0.0;
   double _yValue = 0.0;
   double _zValue = 0.0;
 
+  // Location data
+  Position? _currentPosition;
+  String _locationError = '';
+  bool _loadingLocation = false;
+
+  // WebSocket variables
   WebSocketChannel? _channel;
   bool _isConnected = false;
   String _lastMessage = "No messages received";
@@ -28,18 +45,64 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _connectToWebSocket();
     _startListeningToAccelerometer();
+    _getCurrentLocation();
   }
 
   void _startListeningToAccelerometer() {
     _accelerometerSubscription =
         accelerometerEvents.listen((AccelerometerEvent event) {
-      setState(() {
-        _xValue = event.x;
-        _yValue = event.y;
-        _zValue = event.z;
-      });
-      _sendSensorData();
+          setState(() {
+            _xValue = event.x;
+            _yValue = event.y;
+            _zValue = event.z;
+          });
+          _sendSensorData();
+        });
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() {
+      _loadingLocation = true;
+      _locationError = '';
     });
+
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() {
+            _loadingLocation = false;
+            _locationError = 'Location permission denied';
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() {
+          _loadingLocation = false;
+          _locationError = 'Location permission permanently denied';
+        });
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _currentPosition = position;
+        _loadingLocation = false;
+      });
+
+      _sendSensorData();
+    } catch (e) {
+      setState(() {
+        _loadingLocation = false;
+        _locationError = 'Error getting location: $e';
+      });
+    }
   }
 
   void _connectToWebSocket() {
@@ -54,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       _channel!.stream.listen(
-        (message) {
+            (message) {
           print('Received from server: $message');
           setState(() {
             _lastMessage = message.toString();
@@ -98,7 +161,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final data = {
       "timestamp": DateTime.now().toIso8601String(),
-      "accelerometer": {"x": _xValue, "y": _yValue, "z": _zValue}
+      "accelerometer": {"x": _xValue, "y": _yValue, "z": _zValue},
+      "location": _currentPosition != null
+          ? {
+        "latitude": _currentPosition!.latitude,
+        "longitude": _currentPosition!.longitude,
+        "altitude": _currentPosition!.altitude,
+        "accuracy": _currentPosition!.accuracy
+      }
+          : null
     };
 
     try {
@@ -120,108 +191,32 @@ class _HomeScreenState extends State<HomeScreen> {
     return SafeArea(
       child: Scaffold(
         appBar: CustomAppBar(
-          title: 'Baigan',
-          showCartIcon: true,
+          title: 'Home',
+          showCartIcon: false,
         ),
         backgroundColor: Colors.grey.shade300,
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-
-                // Connection Status
-                Card(
-                  elevation: 4,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'WebSocket Status',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: _isConnected ? Colors.green : Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _isConnected
-                                  ? 'Connected to Server'
-                                  : 'Disconnected',
-                              style: TextStyle(
-                                color: _isConnected ? Colors.green : Colors.red,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Text('Last Response: $_lastMessage',
-                            style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Real Accelerometer Data
-                Card(
-                  elevation: 4,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Real Accelerometer Data',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _sensorValueBox('X', _xValue.toStringAsFixed(3)),
-                            _sensorValueBox('Y', _yValue.toStringAsFixed(3)),
-                            _sensorValueBox('Z', _zValue.toStringAsFixed(3)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              // Use your new custom widget
+              const EmergencyContactsWidget(),
+              const SizedBox(height: 30),
+              // Use your new custom widget
+              const EmergencyServicesGrid(),
+              const SizedBox(height: 30),
+              // Use your new custom widget
+              SosButton(
+                onPressed: () {
+                  // Add SOS action here
+                  print('SOS Pressed!');
+                },
+              ),
+              // Additional logic or UI can go here
+            ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _sensorValueBox(String axis, String value) {
-    return Column(
-      children: [
-        Text(axis, style: const TextStyle(fontWeight: FontWeight.bold)),
-        Text(value),
-      ],
     );
   }
 }
