@@ -72,7 +72,7 @@ Aimed at users who are at higher risk of accidents or medical emergencies, this 
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Nithish-Sri-Ram/TechAccelerate-Baigan
+   git clone https://github.com/shreyasingh1354/TechAccelerate-Baigan.git
    cd TechAccelerate-Baigan
    ```
 
